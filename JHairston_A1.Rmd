@@ -1,0 +1,360 @@
+---
+title: "BSHES 740 Assignment 1"
+author: "JaMor Hairston"
+date: "2024-10-4"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+
+# Load datasets
+A1_set1 <- read.csv("TADA_A1_set1.csv")
+A1_set2 <- read.csv("TADA_A1_set2.csv")
+
+#View the first 5 tweets
+head(A1_set1, 5)
+head(A1_set2, 5)
+```
+
+
+1. What are the date ranges for the two sets? What information is provided in the CSV files? What are the languages in which tweets have been posted? (2 points)
+
+```{r}
+# Display information about the datasets and the length. (Question 2)
+summary(A1_set1)
+summary(A1_set2)
+```
+
+```{r}
+# Convert the 'date' column to Date type
+A1_set1$date <- as.Date(A1_set1$date, format="%m/%d/%y")
+
+# Find the date range
+date_range <- range(A1_set1$date, na.rm = TRUE)
+print(paste("A1_set1 Date range:", date_range[1], "to", date_range[2]))
+
+# Get the unique languages
+languages <- unique(A1_set1$lang)
+print("Languages in which A1_set1 tweets have been posted:")
+print(languages)
+```
+
+```{r}
+# Convert the 'date' column to Date type
+A1_set2$date <- as.Date(A1_set2$date, format="%Y/%m/%d")
+
+# str(A1_set2$date)
+
+# Find the date range
+date_range <- range(A1_set2$date, na.rm = TRUE)
+print(paste("A1_set2 Date range:", date_range[1], "to", date_range[2]))
+
+# Get the unique languages
+languages <- unique(A1_set2$lang)
+print("Languages in which A1_set2 tweets have been posted:")
+print(languages)
+```
+
+2. How many tweets are there for methadone, Suboxone, and fentanyl in total?
+
+```{r}
+# Convert the text column to lowercase for easier pattern matching
+A1_set1$text <- tolower(A1_set1$text)
+A1_set2$text <- tolower(A1_set2$text)
+
+# Define substances keywords
+patterns <- c("methadone", "suboxone", "bupes", "fentanyl", "fent")
+
+# Filter rows containing any of the substances in the text
+substance_tweets1 <- A1_set1 %>%
+  filter(grepl(paste(patterns, collapse = "|"), text))
+
+substance_tweets2 <- A1_set2 %>%
+  filter(grepl(paste(patterns, collapse = "|"), text))
+
+# Count the total number of tweets containing these substances
+total_substance_tweets1 <- nrow(substance_tweets1)
+total_substance_tweets2 <- nrow(substance_tweets2)
+print(paste("Total number of A1_set1 tweets for key substances:", total_substance_tweets1))
+print(paste("Total number of A1_set2 tweets for key substances:", total_substance_tweets2))
+```
+
+4. Are there fentanyl analogs that are also being discussed (eg., carfentanil)?
+
+```{r}
+fent_analogs <- c("carfentanil", "acetylfentanyl", "furanylfentanyl", "cyclopropylfentanyl", "acrylfentanyl")
+
+# Search for posts that mention fentanyl analogs
+analog_posts1 <- A1_set1 %>%
+  filter(grepl(paste(fent_analogs, collapse = "|"), text))
+
+analog_posts2 <- A1_set2 %>%
+  filter(grepl(paste(fent_analogs, collapse = "|"), text))
+
+# View the filtered posts mentioning fentanyl analogs
+print(paste("Number of fentanyl analogs A1_set1 posts :", nrow(analog_posts1)))
+print(paste("Number of fentanyl analogs A1_set2 posts :", nrow(analog_posts2)))
+```
+
+5. What are some of the topics that are most closely associated with each of the three substances?
+
+```{r}
+library(tidyr)
+library(tidytext)
+library(ggplot2)
+
+# Define substances and words to ignore
+substances <- c("methadone", "suboxone", "fentanyl")
+ignore_words <- c("https", "t.co", "methadone_cat", "amp", "danlairdmd", "tootwisted40", "2")
+
+# Function to clean and tokenize text
+clean_and_tokenize <- function(dataset, substance) {
+  dataset %>%
+    filter(grepl(substance, text)) %>%              # Filter for posts mentioning the substance
+    unnest_tokens(word, text) %>%                   # Tokenize the text
+    filter(!word %in% ignore_words) %>%             # Remove ignored words
+    filter(!word %in% stop_words$word) %>%          # Remove common stop words
+    filter(word != substance) %>%                   # Exclude the substance name itself
+    count(word, sort = TRUE) %>%                    # Count word frequencies
+    top_n(10, n)                                    # Return the top 10 most frequent words
+}
+
+# Load the default stop words from tidytext
+data(stop_words)
+
+# Get the top words for each substance
+top_methadone_s1 <- clean_and_tokenize(A1_set1, "methadone")
+top_suboxone_s1 <- clean_and_tokenize(A1_set1, "suboxone")
+top_fentanyl_s1 <- clean_and_tokenize(A1_set1, "fentanyl")
+
+
+print(top_methadone_s1)
+print(top_suboxone_s1)
+print(top_fentanyl_s1)
+
+# Visualize the top topics for each substance
+ggplot(top_methadone_s1, aes(x = reorder(word, n), y = n)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Top A1_set1 Topics Associated with Methadone", x = "Words", y = "Frequency")
+
+ggplot(top_suboxone_s1, aes(x = reorder(word, n), y = n)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Top A1_set1 Topics Associated with Suboxone", x = "Words", y = "Frequency")
+
+ggplot(top_fentanyl_s1, aes(x = reorder(word, n), y = n)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Top A1_set1 Topics Associated with Fentanyl", x = "Words", y = "Frequency")
+
+```
+
+```{r}
+# Get the top words for each substance
+top_methadone_s2 <- clean_and_tokenize(A1_set2, "methadone")
+top_suboxone_s2 <- clean_and_tokenize(A1_set2, "suboxone")
+top_fentanyl_s2 <- clean_and_tokenize(A1_set2, "fentanyl")
+
+print(top_methadone_s2)
+print(top_suboxone_s2)
+print(top_fentanyl_s2)
+
+# Visualize the top topics for each substance
+ggplot(top_methadone_s2, aes(x = reorder(word, n), y = n)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Top A1_set2 Topics Associated with Methadone", x = "Words", y = "Frequency")
+
+ggplot(top_suboxone_s2, aes(x = reorder(word, n), y = n)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Top A1_set2 Topics Associated with Suboxone", x = "Words", y = "Frequency")
+
+ggplot(top_fentanyl_s2, aes(x = reorder(word, n), y = n)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Top A1_set2 Topics Associated with Fentanyl", x = "Words", y = "Frequency")
+```
+
+6. Generate word clouds for each set.
+
+```{r}
+library(wordcloud)
+
+# Generate word clouds for each substance
+set.seed(1234)
+
+# Methadone
+wordcloud(words = top_methadone_s1$word, freq = top_methadone_s1$n, min.freq = 1,
+          random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"), scale = c(3, 0.5))
+title("Word Cloud for A1_set1 Methadone")
+
+# Suboxone
+wordcloud(words = top_suboxone_s1$word, freq = top_suboxone_s1$n, min.freq = 1,
+          random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Set3"), scale = c(3, 0.5))
+title("Word Cloud for A1_set1 Suboxone")
+
+# Fentanyl
+wordcloud(words = top_fentanyl_s1$word, freq = top_fentanyl_s1$n, min.freq = 1,
+          random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Blues"), scale = c(3, 0.5))
+title("Word Cloud for A1_set1 Fentanyl")
+
+```
+
+```{r}
+library(wordcloud)
+
+# Generate word clouds for each substance
+set.seed(1234)
+
+# Methadone
+wordcloud(words = top_methadone_s2$word, freq = top_methadone_s2$n, min.freq = 1,
+          random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"), scale = c(3, 0.5))
+title("Word Cloud for A1_set2 Methadone")
+
+# Suboxone
+wordcloud(words = top_suboxone_s2$word, freq = top_suboxone_s2$n, min.freq = 1,
+          random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Set3"), scale = c(3, 0.5))
+title("Word Cloud for A1_set2 Suboxone")
+
+# Fentanyl
+wordcloud(words = top_fentanyl_s2$word, freq = top_fentanyl_s2$n, min.freq = 1,
+          random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Blues"), scale = c(3, 0.5))
+title("Word Cloud for A1_set2 Fentanyl")
+```
+
+7. Generate appropriate time-series figures to compare how the frequencies of mentions of these substances differ.
+
+```{r}
+# Filter for tweets mentioning each substance and count by date
+S1_mentions_by_date <- A1_set1 %>%
+  mutate(methadone = grepl("methadone", text),
+         suboxone = grepl("suboxone", text),
+         fentanyl = grepl("fentanyl", text)) %>%
+  group_by(date) %>%
+  summarise(methadone_mentions = sum(methadone),
+            suboxone_mentions = sum(suboxone),
+            fentanyl_mentions = sum(fentanyl))
+
+# Reshape data for plotting
+mentions_long <- S1_mentions_by_date %>%
+  pivot_longer(cols = c(methadone_mentions, suboxone_mentions, fentanyl_mentions),
+               names_to = "substance", values_to = "mentions")
+
+# Plot the time-series comparison
+ggplot(mentions_long, aes(x = date, y = mentions, color = substance)) +
+  geom_line(size = 1) +
+  labs(title = "A1_set1 Mentions of Methadone, Suboxone, and Fentanyl Over Time",
+       x = "Date", y = "Number of Mentions",
+       color = "Substance") +
+  theme_minimal()
+```
+
+```{r}
+# Filter for tweets mentioning each substance and count by date
+S2_mentions_by_date <- A1_set2 %>%
+  mutate(methadone = grepl("methadone", text),
+         suboxone = grepl("suboxone", text),
+         fentanyl = grepl("fentanyl", text)) %>%
+  group_by(date) %>%
+  summarise(methadone_mentions = sum(methadone),
+            suboxone_mentions = sum(suboxone),
+            fentanyl_mentions = sum(fentanyl))
+
+# Reshape data for plotting
+mentions_long <- S2_mentions_by_date %>%
+  pivot_longer(cols = c(methadone_mentions, suboxone_mentions, fentanyl_mentions),
+               names_to = "substance", values_to = "mentions")
+
+# Plot the time-series comparison
+ggplot(mentions_long, aes(x = date, y = mentions, color = substance)) +
+  geom_line(size = 1) +
+  labs(title = "A1_set2 Mentions of Methadone, Suboxone, and Fentanyl Over Time",
+       x = "Date", y = "Number of Mentions",
+       color = "Substance") +
+  theme_minimal()
+```
+
+8. Find the top 10 most frequent bigrams in each of the three sets. Plot a bar chart for these.
+
+```{r}
+ignore_words <- c("https", "t.co", "methadone", "suboxone", "fentanyl", 
+                  "methadone_cat", "amp", "danlairdmd", "tootwisted40", "2", 
+                  "is", "i", "a", "the", "to", "of", "in", "and", "if", "it")
+
+# Function to extract and count bigrams, while removing ignore words
+top_bigrams <- function(data, substance) {
+  data %>%
+    filter(grepl(substance, text)) %>%                               # Filter for posts mentioning the substance
+    unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%         # Tokenize the text into bigrams
+    separate(bigram, into = c("word1", "word2"), sep = " ") %>%      # Separate bigrams into two columns
+    filter(!word1 %in% ignore_words, !word2 %in% ignore_words) %>%   # Remove bigrams with ignore words
+    unite(bigram, word1, word2, sep = " ") %>%                       # Recombine the bigrams
+    count(bigram, sort = TRUE) %>%                                   # Count occurrences of each bigram
+    top_n(10, n)                                                     # Get the top 10 most frequent bigrams
+}
+
+# Extract top bigrams for each substance
+bigrams_methadone <- top_bigrams(A1_set1, "methadone")
+bigrams_suboxone <- top_bigrams(A1_set1, "suboxone")
+bigrams_fentanyl <- top_bigrams(A1_set1, "fentanyl")
+
+# Plot function for bigrams
+plot_bigrams <- function(bigrams_data, substance_name) {
+  ggplot(bigrams_data, aes(x = reorder(bigram, n), y = n)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    coord_flip() +
+    labs(title = paste("Top 10 A1_set1 Bigrams Associated with", substance_name),
+         x = "Bigrams", y = "Frequency") +
+    theme_minimal()
+}
+
+# Plot top A1_set1 bigrams for methadone
+plot_bigrams(bigrams_methadone, "Methadone")
+
+# Plot top A1_set1 bigrams for suboxone
+plot_bigrams(bigrams_suboxone, "Suboxone")
+
+# Plot top A1_set1 bigrams for fentanyl
+plot_bigrams(bigrams_fentanyl, "Fentanyl")
+```
+
+```{r}
+# Function to extract and count bigrams, while removing ignore words
+top_bigrams <- function(data, substance) {
+  data %>%
+    filter(grepl(substance, text)) %>%
+    unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%
+    separate(bigram, into = c("word1", "word2"), sep = " ") %>%
+    filter(!word1 %in% ignore_words, !word2 %in% ignore_words) %>%
+    unite(bigram, word1, word2, sep = " ") %>%
+    count(bigram, sort = TRUE) %>%
+    top_n(10, n)
+}
+
+# Extract top bigrams for each substance
+bigrams_methadone_s2 <- top_bigrams(A1_set2, "methadone")
+bigrams_suboxone_s2 <- top_bigrams(A1_set2, "suboxone")
+bigrams_fentanyl_s2 <- top_bigrams(A1_set2, "fentanyl")
+
+# Plot function for bigrams
+plot_bigrams <- function(bigrams_data, substance_name) {
+  ggplot(bigrams_data, aes(x = reorder(bigram, n), y = n)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    coord_flip() +
+    labs(title = paste("Top 10 A1_set2 Bigrams Associated with", substance_name),
+         x = "Bigrams", y = "Frequency") +
+    theme_minimal()
+}
+
+# Plot top A1_set1 bigrams for methadone
+plot_bigrams(bigrams_methadone_s2, "Methadone")
+
+# Plot top A1_set1 bigrams for suboxone
+plot_bigrams(bigrams_suboxone_s2, "Suboxone")
+
+# Plot top A1_set1 bigrams for fentanyl
+plot_bigrams(bigrams_fentanyl_s2, "Fentanyl")
+```
