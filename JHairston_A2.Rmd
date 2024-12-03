@@ -1,0 +1,192 @@
+---
+title: "BSHES 740 Assignment 2"
+author: "JaMor Hairston"
+date: "2024-12-2"
+output: html_document
+---
+
+```{r}
+library(caret)
+library(tm)
+library(e1071)
+
+# Load datasets
+A2_set1 <- read.csv("TADA_Annotated_data_2024.csv")
+A2_set2 <- read.csv("TADA_unlabeled_data_2024.csv")
+
+#View the first 5 tweets
+head(A2_set1, 5)
+head(A2_set2, 5)
+```
+
+
+```{r}
+# Preprocess the tweets
+A2_set1$text <- tolower(A2_set1$text)
+corpus <- Corpus(VectorSource(A2_set1$text))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, removeWords, stopwords("english"))
+corpus <- tm_map(corpus, stripWhitespace)
+
+```
+
+```{r}
+# Convert the corpus to a document-term matrix
+dtm <- DocumentTermMatrix(corpus)
+dtm <- removeSparseTerms(dtm, 0.99)
+
+# Convert the DTM to a data frame
+dtm_data <- as.data.frame(as.matrix(dtm))
+dtm_data$class <- factor(A2_set1$class) # Ensure class is a factor for multi-class classification
+
+```
+
+```{r}
+# Split data into training and testing sets
+set.seed(123)
+trainIndex <- createDataPartition(dtm_data$class, p = 0.8, list = FALSE)
+train_data <- dtm_data[trainIndex, ]
+test_data <- dtm_data[-trainIndex, ]
+
+# Define a control object for cross-validation
+control <- trainControl(method = "cv", number = 5)
+
+# Train Random Forest classifier
+set.seed(123)
+rf_model <- train(class ~ ., data = train_data, method = "rf", trControl = control, importance = TRUE)
+
+# Train Naive Bayes classifier
+set.seed(123)
+nb_model <- train(class ~ ., data = train_data, method = "naive_bayes", trControl = control)
+
+# Train SVM classifier
+set.seed(123)
+svm_model <- train(class ~ ., data = train_data, method = "svmRadial", trControl = control)
+
+# Evaluate the models on the test set
+rf_predictions <- predict(rf_model, test_data)
+nb_predictions <- predict(nb_model, test_data)
+svm_predictions <- predict(svm_model, test_data)
+
+
+
+```
+
+```{r}
+# Generate confusion matrices for evaluation
+rf_conf_matrix <- confusionMatrix(rf_predictions, test_data$class)
+nb_conf_matrix <- confusionMatrix(nb_predictions, test_data$class)
+svm_conf_matrix <- confusionMatrix(svm_predictions, test_data$class)
+
+# Compare overall accuracies
+results <- data.frame(
+  Model = c("Random Forest", "Naive Bayes", "SVM"),
+  Accuracy = c(rf_conf_matrix$overall["Accuracy"],
+               nb_conf_matrix$overall["Accuracy"],
+               svm_conf_matrix$overall["Accuracy"])
+)
+
+# Display the results
+print(results)
+
+```
+
+
+```{r}
+# Preprocess the unlabeled data
+A2_set2$text <- tolower(A2_set2$text)
+unlabeled_corpus <- Corpus(VectorSource(A2_set2$text))
+unlabeled_corpus <- tm_map(unlabeled_corpus, removePunctuation)
+unlabeled_corpus <- tm_map(unlabeled_corpus, removeNumbers)
+unlabeled_corpus <- tm_map(unlabeled_corpus, removeWords, stopwords("english"))
+unlabeled_corpus <- tm_map(unlabeled_corpus, stripWhitespace)
+
+# Create DTM for unlabeled data using the same terms (dictionary) as the labeled data
+unlabeled_dtm <- DocumentTermMatrix(unlabeled_corpus, control = list(dictionary = Terms(dtm)))
+
+# Convert to data frame
+unlabeled_data_matrix <- as.data.frame(as.matrix(unlabeled_dtm))
+
+# Check if the column names of unlabeled_data_matrix align with the training data
+missing_terms <- setdiff(colnames(dtm_data)[-ncol(dtm_data)], colnames(unlabeled_data_matrix))
+if (length(missing_terms) > 0) {
+  for (term in missing_terms) {
+    unlabeled_data_matrix[[term]] <- 0 # Add missing terms with zero counts
+  }
+}
+
+# Ensure the column order matches
+unlabeled_data_matrix <- unlabeled_data_matrix[, colnames(dtm_data)[-ncol(dtm_data)]]
+
+# Predict classes for unlabeled data
+A2_set2$class <- predict(svm_model, unlabeled_data_matrix)
+
+# Save the results to a new CSV
+write.csv(A2_set2, "classified_unlabeled_data.csv", row.names = FALSE)
+
+# Print completion message
+cat("Classification completed. Results saved to 'classified_unlabeled_data.csv'.\n")
+
+
+```
+
+Locale Distribution
+```{r}
+library(dplyr)
+
+classified_data <- read.csv("classified_unlabeled_data.csv")
+
+# Given city populations
+city_population <- data.frame(
+  city = c("A", "B"),
+  population = c(500000, 10000)
+)
+
+# Filter data for nonmedical use (class = 0)
+nonmedical_tweets <- classified_data %>% filter(class == 0)
+
+# Count number of nonmedical tweets per city
+nonmedical_counts <- nonmedical_tweets %>%
+  group_by(city) %>%
+  summarise(nonmedical_count = n())
+
+# Count total tweets per city
+total_tweets <- classified_data %>%
+  group_by(city) %>%
+  summarise(total_tweets = n())
+
+# Merge counts and calculate proportions
+city_analysis <- left_join(nonmedical_counts, total_tweets, by = "city") %>%
+  mutate(
+    nonmedical_proportion = nonmedical_count / total_tweets, # Proportion of nonmedical tweets
+    population = city_population$population[match(city, city_population$city)], # Add population data
+    population_adjusted_rate = (nonmedical_count / population) # Rate per population
+  )
+
+# Display the analysis
+print(city_analysis)
+
+```
+
+Gender_ID Distribution
+```{r}
+# Count the number of tweets by class and gender
+gender_distribution <- classified_data %>%
+  group_by(gender_id, class) %>%
+  summarise(tweet_count = n(), .groups = "drop")
+
+# Calculate proportions within each gender
+gender_distribution <- gender_distribution %>%
+  group_by(gender_id) %>%
+  mutate(
+    total_tweets = sum(tweet_count),
+    class_proportion = tweet_count / total_tweets
+  )
+
+# Display the results
+print(gender_distribution)
+
+
+```
+
